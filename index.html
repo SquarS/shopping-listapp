@@ -173,23 +173,38 @@
     <p class="empty-msg" id="emptyMsg">No items yet.</p>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
+    const SUPABASE_URL = 'https://axymqdzxwqzleyaevlhp.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4eW1xZHp4d3F6bGV5YWV2bGhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxMTIyNDgsImV4cCI6MjA4NTY4ODI0OH0.TJ4PR6muU28knzv9grLHo1GUFtmZ0jdcrOeqtoO1C-0';
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     const input = document.getElementById('itemInput');
     const addBtn = document.getElementById('addBtn');
     const listEl = document.getElementById('list');
     const emptyMsg = document.getElementById('emptyMsg');
 
-    let items = JSON.parse(localStorage.getItem('shoppingList') || '[]');
+    let items = [];
 
-    function save() {
-      localStorage.setItem('shoppingList', JSON.stringify(items));
+    async function loadItems() {
+      const { data, error } = await db
+        .from('shopping_items')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Failed to load items:', error);
+        return;
+      }
+      items = data;
+      render();
     }
 
     function render() {
       listEl.innerHTML = '';
       emptyMsg.style.display = items.length ? 'none' : 'block';
 
-      items.forEach((item, i) => {
+      items.forEach((item) => {
         const li = document.createElement('li');
         if (item.checked) li.classList.add('checked');
 
@@ -206,15 +221,32 @@
           </button>
         `;
 
-        li.querySelector('.check-btn').addEventListener('click', () => {
-          items[i].checked = !items[i].checked;
-          save();
+        li.querySelector('.check-btn').addEventListener('click', async () => {
+          const newChecked = !item.checked;
+          const { error } = await db
+            .from('shopping_items')
+            .update({ checked: newChecked })
+            .eq('id', item.id);
+
+          if (error) {
+            console.error('Failed to update item:', error);
+            return;
+          }
+          item.checked = newChecked;
           render();
         });
 
-        li.querySelector('.delete-btn').addEventListener('click', () => {
-          items.splice(i, 1);
-          save();
+        li.querySelector('.delete-btn').addEventListener('click', async () => {
+          const { error } = await db
+            .from('shopping_items')
+            .delete()
+            .eq('id', item.id);
+
+          if (error) {
+            console.error('Failed to delete item:', error);
+            return;
+          }
+          items = items.filter(i => i.id !== item.id);
           render();
         });
 
@@ -222,12 +254,22 @@
       });
     }
 
-    function addItem() {
+    async function addItem() {
       const name = input.value.trim();
       if (!name) return;
-      items.push({ name, checked: false });
+
+      const { data, error } = await db
+        .from('shopping_items')
+        .insert({ name, checked: false })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Failed to add item:', error);
+        return;
+      }
+      items.push(data);
       input.value = '';
-      save();
       render();
       input.focus();
     }
@@ -243,7 +285,7 @@
       if (e.key === 'Enter') addItem();
     });
 
-    render();
+    loadItems();
   </script>
 </body>
 </html>
